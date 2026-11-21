@@ -61,7 +61,7 @@ describe('설정 목록', () => {
     const router = renderAt('/settings');
     const list = await screen.findByRole('list', { name: '설정 항목' });
     const hours = await within(list).findByRole('link', { name: /영업시간.*화~일/ });
-    expect(within(list).getByText('메뉴').closest('[aria-disabled="true"]')).not.toBeNull();
+    expect(within(list).getByText('담당자').closest('[aria-disabled="true"]')).not.toBeNull();
     await userEvent.click(hours);
     expect(router.state.location.pathname).toBe('/settings/hours');
   });
