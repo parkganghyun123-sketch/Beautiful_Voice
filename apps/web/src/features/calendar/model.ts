@@ -19,7 +19,11 @@ export const STATUS_TEXT: Record<AppointmentStatus, string> = {
 /** 캘린더에 그릴 예약 한 건. 고객·메뉴·담당자는 이름까지 붙여서 받는다(카드에 보이므로). */
 export interface CalendarAppointment {
   id: string;
+  /** 고객 상세(W6)로 가는 연결. 없으면 이름만 보인다. */
+  customerId?: string | null;
   customerName: string;
+  /** 예약 보기(W2) 이름 아래 전화번호. */
+  customerPhone?: string | null;
   menuName: string | null;
   staffId: string;
   /** 관리 시작(UTC ISO). */
@@ -44,6 +48,14 @@ export interface CalendarBlock {
 export interface Staff {
   id: string;
   name: string;
+}
+
+/** 메뉴(설정 2A-1). 예약 넣기(W3)에서 칩을 고르면 관리·준비 시간이 채워진다(결정 S3). */
+export interface Menu {
+  id: string;
+  name: string;
+  durationMin: number;
+  prepMin: number;
 }
 
 export interface CalendarData {

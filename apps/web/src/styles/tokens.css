@@ -31,6 +31,9 @@
   --surface: var(--seed-color-bg-layer-default); /* 카드, 시트, 입력 칸 */
   --ink: var(--seed-color-fg-neutral); /* 글자 */
   --ink-soft: var(--seed-color-fg-neutral-muted); /* 보조 글자 */
+  --ink-subtle: var(--seed-color-fg-neutral-subtle); /* 눈금·흐린 날짜 */
+  --ink-disabled: var(--seed-color-fg-disabled); /* 다른 달 날짜 */
+  --floating: var(--seed-color-bg-layer-floating); /* 시트·패널 */
   --line: var(--seed-color-stroke-neutral-weak); /* 구분선, 카드 테두리 */
   --control-line: var(--seed-color-palette-gray-700); /* 입력 칸 테두리 */
   --neutral-weak: var(--seed-color-bg-neutral-weak);
@@ -49,12 +52,12 @@
   --cal-appt: var(--seed-color-bg-brand-weak);
   --cal-appt-text: var(--seed-color-fg-brand-contrast);
   --cal-prep: var(--seed-color-bg-brand-weak);
-  --cal-prep-stripe: var(--seed-color-stroke-brand-weak);
-  --cal-block: var(--seed-color-bg-neutral-weak);
+  --cal-prep-stripe: var(--seed-color-palette-purple-300); /* 디자인 HTML .prep */
+  --cal-block: var(--seed-color-palette-gray-100); /* 디자인 HTML .blk */
   --cal-closed: var(--seed-color-bg-disabled);
   --cal-overlap: var(--seed-color-stroke-critical-solid);
-  --cal-block-stripe: var(--seed-color-stroke-neutral-muted);
-  --cal-done: var(--seed-color-bg-neutral-weak); /* 완료: 옅게 */
+  --cal-block-stripe: var(--seed-color-palette-gray-300);
+  --cal-done: var(--seed-color-palette-gray-100); /* 완료: 옅게 */
   --cal-done-text: var(--seed-color-fg-neutral-muted);
   --cal-noshow: var(--seed-color-bg-critical-weak); /* 노쇼 */
   --cal-noshow-text: var(--seed-color-fg-critical-contrast);

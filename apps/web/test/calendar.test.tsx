@@ -346,7 +346,7 @@ describe('캘린더 화면', () => {
   it('불러오기 실패는 경고와 다시 시도로 보인다', async () => {
     let fail = true;
     const ok = API();
-    renderAt('/calendar?date=2026-11-18', { range: (f, t) => (fail ? Promise.reject(new Error('x')) : ok.range(f, t)) });
+    renderAt('/calendar?date=2026-11-18', { ...ok, range: (f, t) => (fail ? Promise.reject(new Error('x')) : ok.range(f, t)) });
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     fail = false;
     await userEvent.click(screen.getByRole('button', { name: '다시 시도' }));
@@ -472,6 +472,8 @@ describe('예약 보기 W2 — 웹 오른쪽 패널 / 폰 아래 시트 (캘린�
     const panel = await screen.findByRole('dialog', { name: '김하늘' });
     expect(within(panel).getByRole('button', { name: '상태 고치기' })).toBeDisabled();
     expect(within(panel).queryByRole('button', { name: '완료' })).not.toBeInTheDocument();
+    // 완료 배지는 positive(초록) — 설계서 §7·§9.3(캡처의 회색과 다르면 설계서를 따른다)
+    expect(within(panel).getByText('완료').closest('[class*="seed-badge__root"]')?.className).toMatch(/tone_positive/);
   });
 
   it('폰: 같은 내용이 아래 시트로 열리고, "+ 예약"은 떠 있는 버튼 자리', async () => {

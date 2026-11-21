@@ -12,7 +12,7 @@ import {
 import { checkSameName, type SameNameCheck, type Subject } from '@bv/customers/duplicates';
 import { createContext, useContext } from 'react';
 import type { Customer, CustomerDetail, Visit } from './model';
-import { seedCustomers } from './mockData';
+import { seedCustomers, seedCustomersWithScene } from './mockData';
 
 export class CustomerValidationError extends Error {
   readonly errors: FieldError[];
@@ -84,7 +84,7 @@ export function createMemoryCustomerApi(seed: MemorySeed = seedCustomers()): Cus
 const CustomerApiContext = createContext<CustomerApi | null>(null);
 export const CustomerApiProvider = CustomerApiContext.Provider;
 
-const defaultApi = createMemoryCustomerApi();
+const defaultApi = createMemoryCustomerApi(seedCustomersWithScene());
 export function useCustomerApi(): CustomerApi {
   return useContext(CustomerApiContext) ?? defaultApi;
 }

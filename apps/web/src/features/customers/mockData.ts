@@ -1,5 +1,6 @@
 // 개발용 합성 데이터. 실제 고객이 아니다(절대 규칙 8) — 전화번호는 모두 010-0000-xxxx.
 // ASSUMPTION: PM 가짜 데이터([P2] 4. 데이터 §5, 11/19 전달 예정)가 오면 같은 형식으로 바꾼다.
+import { SCENE_CUSTOMERS } from '@/features/calendar/mockData';
 import type { MemorySeed } from './api';
 
 const DAY = 86_400_000;
@@ -29,4 +30,10 @@ export function seedCustomers(): MemorySeed {
       c3: [{ id: 'v7', startsAt: at(-3, 14), menu: '등 관리', status: 'completed' }],
     },
   };
+}
+
+/** 개발 서버 기본 데이터: 위 고객 + 캘린더 디자인 장면의 고객(같은 id, 예약 넣기 W3 검색에 나온다). */
+export function seedCustomersWithScene(): MemorySeed {
+  const base = seedCustomers();
+  return { ...base, customers: [...base.customers, ...SCENE_CUSTOMERS.map((c) => ({ ...c }))] };
 }

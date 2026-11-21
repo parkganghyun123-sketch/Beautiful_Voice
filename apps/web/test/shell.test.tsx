@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
@@ -44,13 +44,12 @@ describe('웹셸 내비게이션', () => {
     expect(screen.getByRole('link', { name: '고객' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('머리줄에 NABI·나만의 AI 비서와 로그인한 매장 이름이 보인다(설계서 §3.1)', async () => {
+  it('머리줄에 Beautiful Voice와 로그인한 매장 이름이 보인다(설계서 §3.1, 이름은 11/21 옵마 결정)', async () => {
     const loader = vi.fn(async (shopId: string) => (shopId === 'shop-1' ? '합성 매장' : '다른 매장'));
     await renderAt('/calendar', loader);
     const header = screen.getByRole('banner');
-    expect(header).toHaveTextContent('NABI');
-    expect(header).toHaveTextContent('나만의 AI 비서');
-    expect(await screen.findByLabelText('매장')).toHaveTextContent('합성 매장');
+    expect(header).toHaveTextContent('Beautiful Voice');
+    expect(await within(header).findByLabelText('매장')).toHaveTextContent('합성 매장');
     expect(loader).toHaveBeenCalledWith('shop-1');
   });
 

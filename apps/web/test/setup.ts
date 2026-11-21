@@ -38,3 +38,8 @@ globalThis.matchMedia ??= ((query: string) => {
     dispatchEvent: () => false,
   } as unknown as MediaQueryList;
 }) as typeof matchMedia;
+
+// jsdom에는 포인터 캡처가 없다 — SEED 시트(react-drawer)가 시트 안을 누를 때 setPointerCapture를 부른다.
+Element.prototype.setPointerCapture ??= () => {};
+Element.prototype.releasePointerCapture ??= () => {};
+Element.prototype.hasPointerCapture ??= () => false;

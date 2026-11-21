@@ -50,6 +50,11 @@
     --color-paper: var(--paper);
     --color-ink: var(--ink);
     --color-ink-soft: var(--ink-soft);
+    --color-ink-subtle: var(--ink-subtle);
+    --color-ink-disabled: var(--ink-disabled);
+    --color-neutral-weak: var(--neutral-weak);
+    --color-disabled: var(--disabled);
+    --color-floating: var(--floating);
     --color-line: var(--line);
     --color-surface: var(--surface);
     --color-control-line: var(--control-line);
@@ -104,11 +109,11 @@
     font-family: var(--font-body);
     }
 }
-/* 웹 오른쪽 패널(SEED SidePanel, 예약 보기 W2)은 머리줄(h-14 = 56px) 아래부터 — 위쪽 탭을 가리지 않게.
+/* 웹 오른쪽 패널(SEED SidePanel, 예약 보기 W2)은 머리줄(h-16 = 64px) 아래부터 — 위쪽 탭을 가리지 않게.
    SEED Positioner가 className을 받지 않아 레시피 클래스에 직접 건다(층 밖이라 seed-components보다 우선). */
 @media (min-width: 768px) {
   .seed-side-panel__positioner {
-    top: 3.5rem;
+    top: 4rem;
   }
 }
 
@@ -116,4 +121,11 @@
 .seed-bottom-sheet__positioner,
 .seed-bottom-sheet__backdrop {
   z-index: 40;
+}
+
+/* 배지는 SEED Badge size="large"를 쓰고 글자만 14px로 올린다(화면 설계서 §9.1, 레시피 기본 12px). 디자인 HTML .nb 보정과 같은 값. */
+.seed-badge__root--size_large {
+  font-size: 14px;
+  line-height: 20px;
+  min-height: 26px;
 }

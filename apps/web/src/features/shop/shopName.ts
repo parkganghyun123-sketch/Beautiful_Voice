@@ -16,7 +16,8 @@ export async function fetchShopName(shopId: string): Promise<string> {
 }
 
 // 개발용 로그인 건너뛰기에서는 서버가 없거나 가짜 매장(dev-shop)이라 부르지 않는다(콘솔 오류 방지).
-const devShopName: ShopNameLoader = async () => FALLBACK_SHOP_NAME;
+// 이름은 디자인 장면과 같은 합성 매장(캘린더 가짜 데이터 seedDesignScene).
+const devShopName: ShopNameLoader = async () => '라온 뷰티 성수점';
 const ShopNameLoaderContext = createContext<ShopNameLoader>(DEV_SKIP_LOGIN ? devShopName : fetchShopName);
 /** 테스트에서 매장 이름을 바꿔 끼울 때 쓴다. */
 export const ShopNameLoaderProvider = ShopNameLoaderContext.Provider;
