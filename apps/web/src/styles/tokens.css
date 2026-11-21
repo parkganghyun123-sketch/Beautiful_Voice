@@ -20,6 +20,14 @@
   --track-color: var(--seed-color-palette-purple-200);
 }
 
+/* 레시피 보정: SEED 시트·창의 기본 층 번호(2)는 웹셸의 위·아래 줄(z-10, #53에서 z-30)보다 낮아 시트 버튼이 가려진다 → 그 위로. */
+.seed-bottom-sheet__positioner {
+  --sheet-z-index: 40;
+}
+.seed-dialog__positioner {
+  --dialog-z-index: 40;
+}
+
 :root {
   color-scheme: light;
 
