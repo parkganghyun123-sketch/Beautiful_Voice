@@ -1,4 +1,5 @@
-// 휴무·휴가(W13, BEA-166): 매주 쉬는 요일과 날짜 휴무(공휴일·휴가)를 추가·지우기. 고치기는 없다(계약: 추가·삭제만).
+// 휴무·휴가(W13, BEA-166): 날짜 휴무(공휴일·휴가)를 추가·지우기. 고치기는 없다(계약: 추가·삭제만).
+// 매주 쉬는 요일은 영업시간 화면의 "정기 휴무" 스위치가 정한다(W13 디자인 11/20) — 여기에는 날짜 휴무만 있다.
 // 추가는 폰에서 아래 시트, 노트북에서 가운데 창(SEED ResponsiveDialog, 해나 11/21 결정).
 // 지우기는 한 번 더 묻지 않는다 — 기록은 서버에 남고(removed), 같은 휴무를 다시 넣으면 된다(디자인 정책: 되돌릴 수 없는 일만 묻는다).
 import type { Closure } from '@bv/contracts';
@@ -8,14 +9,12 @@ import { Link } from 'react-router';
 import { EmptyState, ErrorState } from '@/components/states/DataState';
 import { shopToday } from '@/features/customers/model';
 import { useSettingsApi } from '@/features/settings/api';
-import { groupClosures, KIND_TEXT, noLocalChanges, toClosureInput, withLocalChanges, type ClosureDraft, type ClosureKind, type LocalChanges } from '@/features/settings/closures';
-import { WEEKDAYS } from '@/features/settings/hours';
-import { closureText, WEEKDAY_TEXT, type Weekday } from '@/features/settings/messages';
+import { groupClosures, KIND_TEXT, noLocalChanges, toClosureInput, withLocalChanges, type ClosureDraft, type LocalChanges } from '@/features/settings/closures';
+import { closureText } from '@/features/settings/messages';
 import { useSaveAction } from '@/features/settings/useSaveAction';
 import { useLoad } from '@/lib/useLoad';
 
-/** ASSUMPTION(#58 리뷰 ❔2): 영업시간에서 끈 요일과 겹치지 않게 안내만 한다. 저장은 막지 않는다. */
-export const WEEKLY_HELP_TEXT = '영업시간에서 이미 끈 요일은 여기 넣지 않아도 돼요.';
+export const WEEKLY_MOVED_TEXT = '매주 쉬는 요일은 영업시간에서 정기 휴무로 정해요.';
 
 export function ClosuresPage() {
   const api = useSettingsApi();
@@ -26,8 +25,8 @@ export function ClosuresPage() {
   const [local, setLocal] = useState<LocalChanges>(() => noLocalChanges([]));
   const closures = state.status === 'ok' ? state.data : null;
   const mine = closures && local.base === closures ? local : noLocalChanges(closures ?? []);
-  const shown = closures ? withLocalChanges(closures, mine) : [];
-  const takenWeekdays = shown.flatMap((c) => (c.kind === 'weekly' ? [c.weekday] : []));
+  // 매주 휴무는 영업시간 화면 몫이라 여기서는 날짜 휴무만 보인다.
+  const shown = closures ? withLocalChanges(closures, mine).filter((c) => c.kind !== 'weekly') : [];
 
   return (
     <div className="flex flex-col gap-4 px-4 pt-6 md:max-w-lg">
@@ -48,7 +47,6 @@ export function ClosuresPage() {
       <AddClosureSheet
         open={adding}
         onOpenChange={setAdding}
-        takenWeekdays={takenWeekdays}
         reload={reload}
         onAdded={(created) => setLocal({ ...mine, added: [...mine.added, created] })}
       />
@@ -69,7 +67,7 @@ function ClosureList({
 }) {
   const api = useSettingsApi();
   const remove = useSaveAction(reload);
-  const { weekly, upcoming, past } = groupClosures(closures, shopToday());
+  const { upcoming, past } = groupClosures(closures, shopToday());
 
   const lastTarget = useRef<string | null>(null);
   async function removeOne(id: string) {
@@ -99,8 +97,7 @@ function ClosureList({
         </p>
       )}
 
-      {closures.length === 0 && <EmptyState title="등록한 휴무가 없어요" description="매주 쉬는 요일이나 공휴일·휴가를 추가해 주세요." />}
-      {weekly.length > 0 && <Section title="매주 쉬는 요일">{weekly.map(row)}</Section>}
+      {closures.length === 0 && <EmptyState title="등록한 휴무가 없어요" description="공휴일이나 휴가를 추가해 주세요." />}
       {upcoming.length > 0 && <Section title="다가오는 휴무">{upcoming.map(row)}</Section>}
       {past.length > 0 && (
         <details className="text-ink">
@@ -108,6 +105,9 @@ function ClosureList({
           <ul className="flex flex-col divide-y divide-line">{past.map(row)}</ul>
         </details>
       )}
+      <Link to="/settings/hours" className="text-sm text-ink-soft underline">
+        {WEEKLY_MOVED_TEXT}
+      </Link>
     </div>
   );
 }
@@ -138,28 +138,22 @@ function ClosureRow({ closure, disabled, onRemove }: { closure: Closure; disable
   );
 }
 
-const emptyDraft = (weekday: Weekday): ClosureDraft => ({ kind: 'vacation', weekday, startDate: '', endDate: '', note: '' });
+const emptyDraft = (): ClosureDraft => ({ kind: 'vacation', startDate: '', endDate: '', note: '' });
 
 function AddClosureSheet({
   open,
   onOpenChange,
-  takenWeekdays,
   reload,
   onAdded,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  takenWeekdays: Weekday[];
   reload: () => void;
   onAdded: (created: Closure) => void;
 }) {
   const api = useSettingsApi();
   const save = useSaveAction(reload);
-  // ASSUMPTION: 이미 매주 휴무인 요일은 다시 고르지 않게 목록에서 뺀다(같은 휴무 두 줄 방지, 명세에 없음).
-  const freeWeekdays = WEEKDAYS.filter((d) => !takenWeekdays.includes(d));
-  const [kept, setDraft] = useState<ClosureDraft>(() => emptyDraft(freeWeekdays[0] ?? 1));
-  // 고른 요일이 그사이 매주 휴무로 들어갔으면(방금 추가 등) 남은 첫 요일로 — 화면에 안 보이는 요일이 저장되지 않게.
-  const draft = freeWeekdays.includes(kept.weekday) ? kept : { ...kept, weekday: freeWeekdays[0] ?? kept.weekday };
+  const [draft, setDraft] = useState<ClosureDraft>(emptyDraft);
 
   function change(patch: Partial<ClosureDraft>) {
     setDraft((d) => ({ ...d, ...patch }));
@@ -175,7 +169,7 @@ function AddClosureSheet({
       reload();
       return;
     }
-    setDraft(emptyDraft(freeWeekdays[0] ?? 1));
+    setDraft(emptyDraft());
     save.clear();
   }
 
@@ -189,8 +183,6 @@ function AddClosureSheet({
     }
   }
 
-  const weeklyFull = draft.kind === 'weekly' && freeWeekdays.length === 0;
-
   return (
     <ResponsiveDialog.Root open={open} onOpenChange={close}>
       <ResponsiveDialog.Positioner>
@@ -202,36 +194,24 @@ function AddClosureSheet({
           <form id="add-closure" noValidate onSubmit={submit}>
             <ResponsiveDialog.Body>
               <fieldset disabled={save.saving} className="flex flex-col gap-4 pb-2">
-                <SegmentedControl.Root aria-label="휴무 종류" value={draft.kind} onValueChange={(v) => change({ kind: v as ClosureKind })}>
+                <SegmentedControl.Root aria-label="휴무 종류" value={draft.kind} onValueChange={(v) => change({ kind: v as ClosureDraft['kind'] })}>
                   <SegmentedControl.Indicator />
-                  {(['weekly', 'holiday', 'vacation'] as const).map((k) => (
+                  {(['holiday', 'vacation'] as const).map((k) => (
                     <SegmentedControl.Item key={k} value={k}>
                       <SegmentedControlItemHiddenInput />
-                      {k === 'weekly' ? '매주' : KIND_TEXT[k]}
+                      {KIND_TEXT[k]}
                     </SegmentedControl.Item>
                   ))}
                 </SegmentedControl.Root>
 
-                {draft.kind === 'weekly' ? (
-                  <FieldBox label="쉬는 요일" help={weeklyFull ? '모든 요일이 이미 매주 휴무예요.' : WEEKLY_HELP_TEXT}>
-                    <select value={draft.weekday} onChange={(e) => change({ weekday: Number(e.target.value) as Weekday })} className={INPUT}>
-                      {freeWeekdays.map((d) => (
-                        <option key={d} value={d}>
-                          {WEEKDAY_TEXT[d]}요일
-                        </option>
-                      ))}
-                    </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <FieldBox label="시작일">
+                    <input type="date" value={draft.startDate} onChange={(e) => change({ startDate: e.target.value })} className={INPUT} />
                   </FieldBox>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    <FieldBox label="시작일">
-                      <input type="date" value={draft.startDate} onChange={(e) => change({ startDate: e.target.value })} className={INPUT} />
-                    </FieldBox>
-                    <FieldBox label="끝나는 날" help="비우면 하루만">
-                      <input type="date" value={draft.endDate} min={draft.startDate || undefined} onChange={(e) => change({ endDate: e.target.value })} className={INPUT} />
-                    </FieldBox>
-                  </div>
-                )}
+                  <FieldBox label="끝나는 날" help="비우면 하루만">
+                    <input type="date" value={draft.endDate} min={draft.startDate || undefined} onChange={(e) => change({ endDate: e.target.value })} className={INPUT} />
+                  </FieldBox>
+                </div>
                 <FieldBox label="메모 (선택)">
                   <input value={draft.note} onChange={(e) => change({ note: e.target.value })} placeholder="예: 연말 휴가" autoComplete="off" className={INPUT} />
                 </FieldBox>
@@ -245,7 +225,7 @@ function AddClosureSheet({
             </ResponsiveDialog.Body>
           </form>
           <ResponsiveDialog.Footer>
-            <ActionButton type="submit" form="add-closure" variant="brandSolid" size="large" loading={save.saving} disabled={weeklyFull} className="w-full">
+            <ActionButton type="submit" form="add-closure" variant="brandSolid" size="large" loading={save.saving} className="w-full">
               추가
             </ActionButton>
           </ResponsiveDialog.Footer>

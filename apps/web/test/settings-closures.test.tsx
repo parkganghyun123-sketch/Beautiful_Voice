@@ -1,4 +1,4 @@
-// BEA-166 수용 기준(휴무): 매주 쉬는 요일과 날짜 휴무(공휴일·휴가) 추가·지우기 · 잘못된 날짜는 이유와 함께 거부. 데이터는 합성(절대 규칙 8).
+// BEA-166 수용 기준(휴무): 날짜 휴무(공휴일·휴가) 추가·지우기(매주 쉬는 요일은 영업시간의 정기 휴무) · 잘못된 날짜는 이유와 함께 거부. 데이터는 합성(절대 규칙 8).
 import type { Closure } from '@bv/contracts';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -9,6 +9,7 @@ import { SessionLoaderProvider } from '@/features/auth/session';
 import { createMemorySettingsApi, SettingsApiProvider, type SettingsApi } from '@/features/settings/api';
 import { closuresSummary, groupClosures, noLocalChanges, toClosureInput, withLocalChanges } from '@/features/settings/closures';
 import { seedSettings } from '@/features/settings/mockData';
+import { WEEKLY_MOVED_TEXT } from '@/pages/settings/ClosuresPage';
 import { routes } from '@/routes';
 
 // 매장 날짜를 2026-11-21(서울)로 고정한다 — 합성 휴가(12/24~26)가 "다가오는 휴무"에 머물도록. 날짜만 가짜로 둔다.
@@ -57,20 +58,19 @@ describe('휴무 묶기·문구', () => {
     expect(g.past.map((c) => c.id)).toEqual(['c', 'd']);
   });
 
-  it('설정 목록 요약은 지난 휴무를 세지 않는다', () => {
-    expect(closuresSummary(seedSettings().closures, '2026-11-21')).toBe('매주 월 · 예정 1개');
-    expect(closuresSummary(seedSettings().closures, '2027-01-01')).toBe('매주 월');
-    expect(closuresSummary([], '2026-11-21')).toBe('없음');
+  it('설정 목록 요약은 가장 가까운 날짜 휴무 하나(W13 디자인)', () => {
+    expect(closuresSummary(seedSettings().closures, '2026-11-21')).toBe('다음 휴가 12/24–12/26');
+    expect(closuresSummary([day('h', 'holiday', '2027-01-01')], '2026-11-21')).toBe('다음 공휴일 1/1');
+    expect(closuresSummary(seedSettings().closures, '2027-01-01')).toBe('없음'); // 매주 휴무는 세지 않는다
   });
 
   it('끝나는 날을 비우면 하루짜리, 빈 메모는 저장하지 않는다', () => {
-    expect(toClosureInput({ kind: 'holiday', weekday: 1, startDate: '2026-12-25', endDate: '', note: '  ' })).toEqual({
+    expect(toClosureInput({ kind: 'holiday', startDate: '2026-12-25', endDate: '', note: '  ' })).toEqual({
       kind: 'holiday',
       startDate: '2026-12-25',
       endDate: '2026-12-25',
       note: null,
     });
-    expect(toClosureInput({ kind: 'weekly', weekday: 3, startDate: '', endDate: '', note: '정기 휴무' })).toEqual({ kind: 'weekly', weekday: 3, note: '정기 휴무' });
   });
 });
 
@@ -93,14 +93,17 @@ describe('방금 바뀐 휴무 반영(#59·#60 리뷰)', () => {
 describe('휴무·휴가 화면', () => {
   it('설정 목록에서 요약을 보고 들어간다', async () => {
     const router = renderAt('/settings');
-    await userEvent.click(await screen.findByRole('link', { name: /휴무·휴가.*매주 월 · 예정 1개/ }));
+    await userEvent.click(await screen.findByRole('link', { name: /휴무·휴가.*다음 휴가 12\/24–12\/26/ }));
     expect(router.state.location.pathname).toBe('/settings/closures');
   });
 
-  it('매주 쉬는 요일과 다가오는 휴무를 나눠 보인다', async () => {
+  it('날짜 휴무만 보이고, 매주 쉬는 요일은 영업시간으로 안내한다(W13 디자인)', async () => {
     renderAt('/settings/closures');
-    expect(texts(await section('매주 쉬는 요일'))).toEqual(['매주 월요일지우기']);
     expect(texts(await section('다가오는 휴무'))).toEqual(['12월 24일 ~ 12월 26일 · 연말 휴가휴가지우기']);
+    expect(screen.queryByText(/매주 월요일/)).toBeNull();
+    expect(screen.getByRole('link', { name: WEEKLY_MOVED_TEXT })).toHaveAttribute('href', '/settings/hours');
+    const sheet = await openSheet();
+    expect(within(sheet).queryByRole('radio', { name: '매주' })).toBeNull();
   });
 
   it('공휴일을 하루짜리로 추가하면 시트가 닫히고 목록에 보인다', async () => {
@@ -114,31 +117,6 @@ describe('휴무·휴가 화면', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(texts(await section('다가오는 휴무'))).toEqual(['12월 24일 ~ 12월 26일 · 연말 휴가휴가지우기', '12월 25일공휴일지우기']);
     expect((await api.listClosures()).at(-1)).toMatchObject({ kind: 'holiday', startDate: '2026-12-25', endDate: '2026-12-25', note: null });
-  });
-
-  it('매주 쉬는 요일은 이미 넣은 요일을 빼고 고른다', async () => {
-    const api = createMemorySettingsApi();
-    renderAt('/settings/closures', api);
-    const sheet = await openSheet();
-    await userEvent.click(within(sheet).getByRole('radio', { name: '매주' }));
-    const select = within(sheet).getByLabelText(/쉬는 요일/);
-    expect(within(select).queryByRole('option', { name: '월요일' })).toBeNull();
-    await userEvent.selectOptions(select, '3');
-    await userEvent.click(within(sheet).getByRole('button', { name: '추가' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(texts(await section('매주 쉬는 요일'))).toEqual(['매주 월요일지우기', '매주 수요일지우기']);
-  });
-
-  it('매주 휴무를 연달아 추가해도 같은 요일이 두 번 저장되지 않는다', async () => {
-    const api = createMemorySettingsApi();
-    renderAt('/settings/closures', api);
-    for (let i = 0; i < 2; i++) {
-      const sheet = await openSheet();
-      await userEvent.click(within(sheet).getByRole('radio', { name: '매주' }));
-      await userEvent.click(within(sheet).getByRole('button', { name: '추가' }));
-      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    }
-    expect((await api.listClosures()).flatMap((c) => (c.kind === 'weekly' ? [c.weekday] : []))).toEqual([1, 2, 3]);
   });
 
   it('시작일이 끝나는 날보다 늦으면 이유를 보이고 저장하지 않는다', async () => {
@@ -155,9 +133,9 @@ describe('휴무·휴가 화면', () => {
   it('지우기는 한 번에 지운다(다시 묻지 않음)', async () => {
     const api = createMemorySettingsApi();
     renderAt('/settings/closures', api);
-    await userEvent.click(await screen.findByRole('button', { name: '매주 월요일 지우기' }));
-    await waitFor(() => expect(screen.queryByRole('list', { name: '매주 쉬는 요일' })).toBeNull());
-    expect((await api.listClosures()).map((c) => c.id)).toEqual(['closure-2']);
+    await userEvent.click(await screen.findByRole('button', { name: /12월 24일.*지우기/ }));
+    await waitFor(() => expect(screen.queryByRole('list', { name: '다가오는 휴무' })).toBeNull());
+    expect((await api.listClosures()).map((c) => c.id)).toEqual(['closure-1']); // 매주 휴무는 그대로
   });
 
   it('지난 휴무는 접어 둔다', async () => {
@@ -205,7 +183,7 @@ describe('휴무·휴가 화면', () => {
   });
 
   it('지우기가 끊기면 같은 항목은 같은 키로, 다른 항목은 새 키로 보낸다', async () => {
-    const api = createMemorySettingsApi();
+    const api = createMemorySettingsApi({ ...seedSettings(), closures: [...seedSettings().closures, day('n', 'holiday', '2027-01-01')] });
     const keys: (string | undefined)[] = [];
     let fail = true;
     const flaky: SettingsApi = {
@@ -216,12 +194,12 @@ describe('휴무·휴가 화면', () => {
       },
     };
     renderAt('/settings/closures', flaky);
-    await userEvent.click(await screen.findByRole('button', { name: '매주 월요일 지우기' }));
+    await userEvent.click(await screen.findByRole('button', { name: /12월 24일.*지우기/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent('저장하지 못했어요');
-    await userEvent.click(screen.getByRole('button', { name: '매주 월요일 지우기' }));
+    await userEvent.click(screen.getByRole('button', { name: /12월 24일.*지우기/ }));
     await screen.findByRole('alert');
     fail = false;
-    await userEvent.click(screen.getByRole('button', { name: /12월 24일.*지우기/ }));
+    await userEvent.click(screen.getByRole('button', { name: /1월 1일.*지우기/ }));
     await waitFor(() => expect(keys).toHaveLength(3));
     expect(keys[0]).toBe(keys[1]);
     expect(keys[2]).not.toBe(keys[1]);

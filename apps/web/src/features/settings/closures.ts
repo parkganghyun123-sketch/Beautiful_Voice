@@ -1,11 +1,10 @@
-// 휴무·휴가 화면이 쓰는 묶기·문구. 계약의 세 종류(weekly·holiday·vacation)를 그대로 쓴다(해나 11/21 결정).
+// 휴무·휴가 화면이 쓰는 묶기·문구. 화면은 날짜 휴무(holiday·vacation)만 다루고, 매주 휴무(weekly)는 영업시간의 정기 휴무가 정한다(W13 디자인).
 import type { Closure, ClosureInput } from '@bv/contracts';
-import { WEEKDAY_TEXT, type Weekday } from './messages';
 
 export type ClosureKind = Closure['kind'];
 
-/** 원장에게 보이는 종류 이름. 저장 값 이름(weekly 등)은 보이지 않는다(디자인 정책). */
-export const KIND_TEXT: Record<ClosureKind, string> = { weekly: '매주 쉬는 요일', holiday: '공휴일', vacation: '휴가' };
+/** 날짜 휴무의 종류 이름(배지). 저장 값 이름(holiday 등)은 보이지 않는다(디자인 정책). 매주 휴무는 영업시간의 "정기 휴무". */
+export const KIND_TEXT: Record<'holiday' | 'vacation', string> = { holiday: '공휴일', vacation: '휴가' };
 
 export interface ClosureGroups {
   weekly: Closure[];
@@ -26,13 +25,13 @@ export function groupClosures(closures: readonly Closure[], today: string): Clos
   return { weekly, upcoming, past };
 }
 
-/** 설정 목록 요약. 지난 휴무는 세지 않는다. 예: "매주 월 · 예정 1개", "없음". */
+/** 설정 목록 요약(W13 디자인): 가장 가까운 날짜 휴무 하나. 예: "다음 휴가 12/24–12/26", "다음 공휴일 12/25", "없음". 매주 휴무는 영업시간 쪽 요약. */
 export function closuresSummary(closures: readonly Closure[], today: string): string {
-  const { weekly, upcoming } = groupClosures(closures, today);
-  const parts: string[] = [];
-  if (weekly.length) parts.push(`매주 ${weekly.map((c) => (c.kind === 'weekly' ? WEEKDAY_TEXT[c.weekday] : '')).join('·')}`);
-  if (upcoming.length) parts.push(`예정 ${upcoming.length}개`);
-  return parts.length ? parts.join(' · ') : '없음';
+  const [next] = groupClosures(closures, today).upcoming;
+  if (!next || next.kind === 'weekly') return '없음';
+  const md = (ymd: string) => ymd.slice(5).replace('-', '/').replace(/^0/u, '').replace(/\/0/u, '/');
+  const range = next.startDate === next.endDate ? md(next.startDate) : `${md(next.startDate)}–${md(next.endDate)}`;
+  return `다음 ${KIND_TEXT[next.kind]} ${range}`;
 }
 
 /**
@@ -55,17 +54,14 @@ export function withLocalChanges(closures: readonly Closure[], local: LocalChang
   return [...closures, ...mine.added.filter((a) => !ids.has(a.id))].filter((c) => !mine.removed.includes(c.id));
 }
 
-/** 추가 시트의 입력. 끝나는 날을 비우면 하루짜리(시작일과 같음). */
+/** 휴무 추가 시트의 입력(날짜 휴무만 — 매주 휴무는 영업시간 화면). 끝나는 날을 비우면 하루짜리(시작일과 같음). */
 export interface ClosureDraft {
-  kind: ClosureKind;
-  weekday: Weekday;
+  kind: 'holiday' | 'vacation';
   startDate: string;
   endDate: string;
   note: string;
 }
 
 export function toClosureInput(d: ClosureDraft): ClosureInput {
-  const note = d.note.trim() || null;
-  if (d.kind === 'weekly') return { kind: 'weekly', weekday: d.weekday, note };
-  return { kind: d.kind, startDate: d.startDate, endDate: d.endDate || d.startDate, note };
+  return { kind: d.kind, startDate: d.startDate, endDate: d.endDate || d.startDate, note: d.note.trim() || null };
 }

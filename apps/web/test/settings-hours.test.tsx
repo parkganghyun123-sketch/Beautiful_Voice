@@ -5,10 +5,10 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { describe, expect, it } from 'vitest';
 import { SessionLoaderProvider } from '@/features/auth/session';
-import { createMemorySettingsApi, SettingsApiProvider, type SettingsApi } from '@/features/settings/api';
-import { fromDraft, hoursSummary, timeOptions, toDraft, weekdayAt } from '@/features/settings/hours';
+import { createMemorySettingsApi, SettingsApiProvider, SettingsNotFoundError, type SettingsApi } from '@/features/settings/api';
+import { fromDraft, hoursSummary, timeOptions, toDraft, weekdayAt, weeklyChanges } from '@/features/settings/hours';
 import { seedSettings } from '@/features/settings/mockData';
-import { HOURS_SAVED_TEXT, HOURS_UNSET_TEXT } from '@/pages/settings/HoursPage';
+import { HOURS_RULE_TEXT, HOURS_SAVED_TEXT, HOURS_UNSET_TEXT } from '@/pages/settings/HoursPage';
 import { routes } from '@/routes';
 
 function renderAt(path: string, api: SettingsApi = createMemorySettingsApi()) {
@@ -24,7 +24,10 @@ function renderAt(path: string, api: SettingsApi = createMemorySettingsApi()) {
 }
 
 const unsetApi = () => createMemorySettingsApi({ ...seedSettings(), businessHours: null });
-const daySwitch = (day: string) => screen.getByRole('switch', { name: day });
+/** 요일마다 "정기 휴무" 스위치(켜짐 = 쉬는 날). */
+const holiday = (day: string) => screen.getByRole('switch', { name: `${day}요일 정기 휴무` });
+const findHoliday = (day: string) => screen.findByRole('switch', { name: `${day}요일 정기 휴무` });
+const weeklyDays = async (api: SettingsApi) => (await api.listClosures()).flatMap((c) => (c.kind === 'weekly' ? [c.weekday] : []));
 const select = (label: string) => screen.getByRole('combobox', { name: label });
 
 describe('영업시간 값 바꾸기', () => {
@@ -39,6 +42,22 @@ describe('영업시간 값 바꾸기', () => {
     expect(fromDraft(d)).toEqual({ '2': [{ open: '10:00', close: '13:00' }, { open: '14:00', close: '20:00' }] });
   });
 
+  it('매주 휴무인 요일은 영업시간이 남아 있어도 정기 휴무로 보인다', () => {
+    const w = [{ open: '10:00', close: '20:00' }];
+    const d = toDraft({ '1': w, '2': w }, [1]);
+    expect([d[1].isOpen, d[2].isOpen]).toEqual([false, true]);
+    expect(fromDraft(d)).toEqual({ '2': w }); // 정기 휴무 요일은 영업시간에서도 뺀다
+  });
+
+  it('정기 휴무 스위치와 저장된 매주 휴무를 맞출 더하기·지우기를 구한다(같은 요일 여러 줄이면 모두 지움)', () => {
+    const d = toDraft(null, [3]);
+    d[1].isOpen = true;
+    const weekly = (id: string, weekday: 1 | 2 | 3 | 4 | 5 | 6 | 7) => ({ id, kind: 'weekly' as const, weekday, note: null });
+    const { add, remove } = weeklyChanges(d, [weekly('a', 1), weekly('b', 1), { id: 'v', kind: 'vacation', startDate: '2026-12-24', endDate: '2026-12-26', note: null }]);
+    expect(add).toEqual([3]);
+    expect(remove.map((c) => c.id)).toEqual(['a', 'b']);
+  });
+
   it('목록 한 줄 요약', () => {
     expect(hoursSummary(null)).toBe('아직 안 넣음');
     expect(hoursSummary({})).toBe('모두 쉬는 날');
@@ -46,6 +65,8 @@ describe('영업시간 값 바꾸기', () => {
     const w = [{ open: '10:00', close: '18:00' }];
     expect(hoursSummary({ '1': w, '3': w, '5': w })).toBe('월·수·금');
     expect(hoursSummary({ '6': w, '7': w })).toBe('토·일');
+    // 영업시간에 남아 있어도 매주 휴무 요일은 빼고 센다(#63 리뷰).
+    expect(hoursSummary({ '1': w, '2': w, '3': w, '4': w }, [2])).toBe('월·수·목');
   });
 
   it('30분 단위가 아닌 저장 값도 목록에 남긴다 · 오류 위치에서 요일을 꺼낸다', () => {
@@ -68,20 +89,22 @@ describe('설정 목록', () => {
 });
 
 describe('영업시간 화면', () => {
-  it('월요일을 켜고 시각을 골라 저장하면, 다시 열어도 그대로다', async () => {
+  it('월요일 정기 휴무를 끄고 시각을 골라 저장하면, 매주 휴무가 지워지고 다시 열어도 그대로다', async () => {
     const api = createMemorySettingsApi();
     renderAt('/settings/hours', api);
-    await userEvent.click(await screen.findByRole('switch', { name: '월' }));
+    expect(await findHoliday('월')).toBeChecked(); // 합성 데이터: 매주 월요일 휴무
+    await userEvent.click(holiday('월'));
     await userEvent.selectOptions(select('월요일 여는 시각'), '09:30');
     await userEvent.selectOptions(select('월요일 닫는 시각'), '24:00');
     await userEvent.click(screen.getByRole('button', { name: '저장' }));
 
     expect(await screen.findByRole('status')).toHaveTextContent(HOURS_SAVED_TEXT);
     expect((await api.getBusinessHours())?.['1']).toEqual([{ open: '09:30', close: '24:00' }]);
+    expect(await weeklyDays(api)).toEqual([]);
 
     cleanup();
     renderAt('/settings/hours', api);
-    expect(await screen.findByRole('switch', { name: '월' })).toBeChecked();
+    expect(await findHoliday('월')).not.toBeChecked();
     expect(select('월요일 여는 시각')).toHaveValue('09:30');
   });
 
@@ -100,14 +123,41 @@ describe('영업시간 화면', () => {
     expect(select('화요일 닫는 시각')).toHaveValue('20:00');
   });
 
-  it('요일을 끄면 쉬는 날로 저장된다', async () => {
+  it('정기 휴무를 켜면 쉬는 날이 되고, 매주 휴무로 저장된다(W13 디자인)', async () => {
     const api = createMemorySettingsApi();
     renderAt('/settings/hours', api);
-    await userEvent.click(await screen.findByRole('switch', { name: '일' }));
+    await userEvent.click(await findHoliday('일'));
     expect(screen.queryByRole('combobox', { name: '일요일 여는 시각' })).toBeNull();
+    expect(screen.getAllByText('쉬는 날')).toHaveLength(2); // 월·일
     await userEvent.click(screen.getByRole('button', { name: '저장' }));
     await screen.findByRole('status');
     expect((await api.getBusinessHours())?.['7']).toBeUndefined();
+    expect(await weeklyDays(api)).toEqual([1, 7]);
+    expect((await api.listClosures()).filter((c) => c.kind === 'vacation')).toHaveLength(1); // 날짜 휴무는 그대로
+  });
+
+  it('매주 휴무 저장이 중간에 끊겨도 다시 누르면 두 줄이 되지 않는다', async () => {
+    const api = createMemorySettingsApi();
+    const keys: (string | undefined)[] = [];
+    let fail = true;
+    const flaky: SettingsApi = {
+      ...api,
+      addClosure: async (input, o) => {
+        keys.push(o?.idempotencyKey);
+        const created = await api.addClosure(input, o); // 서버에는 저장된다
+        if (fail) throw new Error('response lost');
+        return created;
+      },
+    };
+    renderAt('/settings/hours', flaky);
+    await userEvent.click(await findHoliday('토'));
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('저장하지 못했어요');
+    fail = false;
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+    await screen.findByRole('status');
+    expect(await weeklyDays(api)).toEqual([1, 6]);
+    expect(keys[0]).toMatch(/:weekly-add:6$/u);
   });
 
   it('닫는 시각이 여는 시각보다 빠르면 그 요일 줄에 이유를 보이고 저장하지 않는다', async () => {
@@ -127,11 +177,12 @@ describe('영업시간 화면', () => {
     const api = unsetApi();
     renderAt('/settings/hours', api);
     expect(await screen.findByText(HOURS_UNSET_TEXT)).toBeInTheDocument();
-    expect(daySwitch('월')).toBeChecked();
+    expect(holiday('화')).not.toBeChecked(); // 예시 값으로 영업
+    expect(holiday('월')).toBeChecked(); // 이미 있는 매주 휴무는 그대로 정기 휴무
     await userEvent.click(screen.getByRole('button', { name: '저장' }));
     await screen.findByRole('status');
     expect(screen.queryByText(HOURS_UNSET_TEXT)).toBeNull();
-    expect(Object.keys((await api.getBusinessHours()) ?? {})).toHaveLength(7);
+    expect(Object.keys((await api.getBusinessHours()) ?? {})).toHaveLength(6);
   });
 
   it('불러오기 실패는 빈 화면이 아니라 다시 시도로 보인다', async () => {
@@ -142,7 +193,7 @@ describe('영업시간 화면', () => {
     const retry = await screen.findByRole('button', { name: '다시 시도' });
     fail = false;
     await userEvent.click(retry);
-    expect(await screen.findByRole('switch', { name: '화' })).toBeChecked();
+    expect(await findHoliday('화')).not.toBeChecked();
   });
 
   it('저장이 끊기면 다시 누를 수 있고, 같은 키로 다시 보낸다', async () => {
@@ -164,5 +215,28 @@ describe('영업시간 화면', () => {
     await screen.findByRole('status');
     expect(keys).toHaveLength(2);
     expect(keys[0]).toBe(keys[1]);
+    expect(keys[0]).toMatch(/:hours$/u);
+  });
+
+  it('지우려던 매주 휴무가 이미 지워졌으면(404) 저장은 성공으로 본다(#63 리뷰)', async () => {
+    const api = createMemorySettingsApi();
+    const flaky: SettingsApi = {
+      ...api,
+      removeClosure: async (id, o) => {
+        await api.removeClosure(id, o); // 다른 기기가 먼저 지운 셈
+        throw new SettingsNotFoundError();
+      },
+    };
+    renderAt('/settings/hours', flaky);
+    await userEvent.click(await findHoliday('월'));
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(HOURS_SAVED_TEXT);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(await weeklyDays(api)).toEqual([]);
+  });
+
+  it('영업시간 규칙 안내를 보인다', async () => {
+    renderAt('/settings/hours');
+    expect(await screen.findByText(HOURS_RULE_TEXT)).toBeInTheDocument();
   });
 });

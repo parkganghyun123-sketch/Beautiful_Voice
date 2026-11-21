@@ -7,7 +7,7 @@ import { Link } from 'react-router';
 import { shopToday } from '@/features/customers/model';
 import { useSettingsApi } from '@/features/settings/api';
 import { closuresSummary } from '@/features/settings/closures';
-import { hoursSummary } from '@/features/settings/hours';
+import { hoursSummary, weeklyDaysOf } from '@/features/settings/hours';
 import { useLoad } from '@/lib/useLoad';
 
 interface Entry {
@@ -23,7 +23,7 @@ export function SettingsPage() {
   const { state } = useLoad(load);
   // 요약을 못 불러와도 목록은 보인다 — 들어가서 다시 불러올 수 있다.
   const [hours, closures] = state.status === 'ok' ? state.data : [];
-  const hoursDetail = state.status === 'ok' ? hoursSummary(hours ?? null) : undefined;
+  const hoursDetail = state.status === 'ok' ? hoursSummary(hours ?? null, weeklyDaysOf(closures ?? [])) : undefined;
   const closuresDetail = closures ? closuresSummary(closures, shopToday()) : undefined;
 
   const entries: Entry[] = [
